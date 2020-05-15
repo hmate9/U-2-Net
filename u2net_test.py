@@ -30,13 +30,32 @@ def normPRED(d):
 
     return dn
 
-def save_output(image_name,pred,d_dir):
+def convert(inImg, maskImg):
+    inImg = inImg.convert('RGBA')
+    maskImg = maskImg.convert('F')
+
+    inShape = np.array(inImg).shape
+
+    maskNp = np.array(maskImg)
+
+    newMask = np.zeros(inShape)
+    newMask[:,:,3] = maskNp
+
+    newMask = Image.fromarray(newMask.astype(np.uint8))
+
+    res = Image.fromarray(np.zeros(inShape).astype(np.uint8))
+    res.paste(inImg, mask=newMask)
+
+    return res
+
+
+def save_output(inputPath, image_name,pred,d_dir):
 
     predict = pred
     predict = predict.squeeze()
     predict_np = predict.cpu().data.numpy()
 
-    im = Image.fromarray(predict_np*255).convert('RGB')
+    im = Image.fromarray(predict_np*255).convert('RGBA')
     img_name = image_name.split("/")[-1]
     image = io.imread(image_name)
     imo = im.resize((image.shape[1],image.shape[0]),resample=Image.BILINEAR)
@@ -51,10 +70,14 @@ def save_output(image_name,pred,d_dir):
 
     imo.save(d_dir+imidx+'.png')
 
+    transparent = convert(Image.open(inputPath), imo)
+    transparent.save(d_dir+imidx+'_t.png')
+
 def main():
 
     # --------- 1. get image path and name ---------
     model_name='u2net'#u2netp
+    #model_name='u2netp'
 
 
     image_dir = './test_data/test_images/'
@@ -83,7 +106,7 @@ def main():
     elif(model_name=='u2netp'):
         print("...load U2NEP---4.7 MB")
         net = U2NETP(3,1)
-    net.load_state_dict(torch.load(model_dir))
+    net.load_state_dict(torch.load(model_dir, map_location=torch.device('cpu')))
     if torch.cuda.is_available():
         net.cuda()
     net.eval()
@@ -91,7 +114,9 @@ def main():
     # --------- 4. inference for each image ---------
     for i_test, data_test in enumerate(test_salobj_dataloader):
 
-        print("inferencing:",img_name_list[i_test].split("/")[-1])
+        imgPath = img_name_list[i_test]
+        imgName = img_name_list[i_test].split("/")[-1]
+        print("inferencing:",imgName)
 
         inputs_test = data_test['image']
         inputs_test = inputs_test.type(torch.FloatTensor)
@@ -108,7 +133,7 @@ def main():
         pred = normPRED(pred)
 
         # save results to test_results folder
-        save_output(img_name_list[i_test],pred,prediction_dir)
+        save_output(imgPath, img_name_list[i_test],pred,prediction_dir)
 
         del d1,d2,d3,d4,d5,d6,d7
 
